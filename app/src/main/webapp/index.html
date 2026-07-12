@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Decoupled Patching Demo</title>
+  <style>
+    body { font-family: 'Red Hat Text', system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #151515; }
+    h1 { color: #ee0000; }
+    .card { border: 1px solid #d9d9d9; border-radius: 8px; padding: 20px; margin: 16px 0; }
+    .status { font-size: 1.4em; font-weight: bold; padding: 10px 0; }
+    .vuln { color: #ee0000; }
+    .safe { color: #3e8635; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+    button { background: #ee0000; color: #fff; border: none; padding: 10px 16px; border-radius: 20px; font-size: 1em; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Decoupled Patching — live demo</h1>
+  <p>This app is compiled against <code>log4j-core 2.14.1</code>, but the version that actually
+     <em>runs</em> is whatever the server module supplies. Patch the module, and this app changes
+     without a rebuild.</p>
+
+  <div class="card">
+    <div>Log4j running right now:</div>
+    <div class="status" id="status">checking…</div>
+    <div id="detail"></div>
+    <button onclick="check()">Re-check version</button>
+  </div>
+
+  <div class="card">
+    <strong>Endpoints</strong>
+    <ul>
+      <li><code>GET /api/version</code> — what Log4j is loaded, and whether it's vulnerable</li>
+      <li><code>GET /api/log?msg=...</code> — the vulnerable logging sink</li>
+      <li><code>GET /api/health</code> — health probe</li>
+    </ul>
+  </div>
+
+  <script>
+    async function check() {
+      const s = document.getElementById('status');
+      const d = document.getElementById('detail');
+      try {
+        const r = await fetch('api/version');
+        const j = await r.json();
+        if (j.log4ShellVulnerable) {
+          s.textContent = j.log4jRunningNow + ' — VULNERABLE';
+          s.className = 'status vuln';
+        } else {
+          s.textContent = j.log4jRunningNow + ' — PATCHED';
+          s.className = 'status safe';
+        }
+        d.textContent = j.note;
+      } catch (e) {
+        s.textContent = 'error: ' + e;
+      }
+    }
+    check();
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  THIS FILE IS THE HEART OF THE DEMO.
+
+  It tells WildFly two things:
+    1. Do not let the server's own logging subsystem manage this deployment's logging.
+    2. Get Log4j from the external server module 'com.redhat.demo.log4j'.
+
+  Because Log4j lives in that module and NOT inside this WAR, patching Log4j means
+  replacing the module's JARs on the server and restarting — the WAR is never rebuilt.
+-->
+<jboss-deployment-structure xmlns="urn:jboss:deployment-structure:1.2">
+  <deployment>
+    <exclude-subsystems>
+      <subsystem name="logging"/>
+    </exclude-subsystems>
+    <dependencies>
+      <module name="com.redhat.demo.log4j" services="import"/>
+    </dependencies>
+  </deployment>
+</jboss-deployment-structure>

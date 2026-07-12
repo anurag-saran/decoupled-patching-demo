@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The external Log4j module. This lives on the SERVER, not in the WAR.
+  The WAR's jboss-deployment-structure.xml depends on this module by name.
+
+  Patching = replacing these JARs and the version references below, then restarting WildFly.
+  The application WAR is never touched.
+
+  Initial state: Log4j 2.14.1  ->  VULNERABLE to Log4Shell (CVE-2021-44228).
+-->
+<module xmlns="urn:jboss:module:1.9" name="com.redhat.demo.log4j">
+  <resources>
+    <resource-root path="log4j-api-2.14.1.jar"/>
+    <resource-root path="log4j-core-2.14.1.jar"/>
+  </resources>
+  <dependencies>
+    <module name="java.naming"/>
+    <module name="java.management"/>
+    <module name="java.xml"/>
+    <module name="java.desktop"/>
+    <module name="java.sql"/>
+  </dependencies>
+</module>

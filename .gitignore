@@ -1,0 +1,13 @@
+# Build output
+app/target/
+*.class
+
+# Downloaded Log4j JARs (fetched at build/setup time, never committed)
+openshift/module/*.jar
+vm/modules/**/*.jar
+
+# Editor / OS noise
+.idea/
+*.iml
+.vscode/
+.DS_Store

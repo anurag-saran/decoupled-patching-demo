@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.redhat.demo</groupId>
+  <artifactId>decoupled-patching-demo</artifactId>
+  <version>1.0.0</version>
+  <packaging>war</packaging>
+  <name>Decoupled Patching Demo</name>
+  <description>A deliberately vulnerable Log4j app, packaged as a Thin WAR whose logging library
+    is supplied by an external, swappable server module — so a security patch never touches this artifact.</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- This is the version the WAR is COMPILED against. The version that actually RUNS
+         is whatever the server module provides at runtime — that's the whole point. -->
+    <log4j.version>2.14.1</log4j.version>
+    <final.name>decoupled-patching-demo</final.name>
+  </properties>
+
+  <dependencies>
+    <!-- Jakarta EE APIs: provided by WildFly at runtime, never bundled. -->
+    <dependency>
+      <groupId>jakarta.ws.rs</groupId>
+      <artifactId>jakarta.ws.rs-api</artifactId>
+      <version>3.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <version>6.0.0</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Log4j: PROVIDED scope on purpose.
+         It is NOT packaged into the WAR. It is supplied by the WildFly module
+         'com.redhat.demo.log4j' at runtime. Patching = swapping that module. -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+      <version>${log4j.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>${log4j.version}</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>${final.name}</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-war-plugin</artifactId>
+        <version>3.4.0</version>
+        <configuration>
+          <!-- Fail the build if anyone accidentally bundles a JAR into WEB-INF/lib.
+               A true Thin WAR carries only YOUR compiled classes. -->
+          <failOnMissingWebXml>false</failOnMissingWebXml>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

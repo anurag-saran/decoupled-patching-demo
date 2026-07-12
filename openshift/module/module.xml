@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Container variant of the Log4j module. Uses UNVERSIONED filenames because on the
+  container side the "patch" is a rebuilt image layer, not an in-place file swap.
+  The running version is still whatever JAR the image baked in — /api/version reports it.
+-->
+<module xmlns="urn:jboss:module:1.9" name="com.redhat.demo.log4j">
+  <resources>
+    <resource-root path="log4j-api.jar"/>
+    <resource-root path="log4j-core.jar"/>
+  </resources>
+  <dependencies>
+    <module name="java.naming"/>
+    <module name="java.management"/>
+    <module name="java.xml"/>
+    <module name="java.desktop"/>
+    <module name="java.sql"/>
+  </dependencies>
+</module>

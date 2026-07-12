@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.redhat.demo</groupId>
+  <artifactId>decoupled-patching-demo-fat</artifactId>
+  <version>1.0.0</version>
+  <packaging>war</packaging>
+  <name>Decoupled Patching Demo - FAT variant</name>
+  <description>The SAME application code as ../app, but packaged Fat: Log4j is bundled inside the
+    WAR. Patching this means editing the version, rebuilding, and shipping a brand-new artifact.
+    Exists only to contrast with the thin/decoupled build.</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- The Fat build's Log4j version. THIS is what you edit to patch a Fat JAR — and then
+         you must rebuild and redeploy a new artifact. Contrast: the thin build never changes
+         this file to patch. -->
+    <log4j.version>2.14.1</log4j.version>
+    <final.name>decoupled-patching-demo-fat</final.name>
+  </properties>
+
+  <dependencies>
+    <!-- Jakarta EE APIs: provided by WildFly at runtime. -->
+    <dependency>
+      <groupId>jakarta.ws.rs</groupId>
+      <artifactId>jakarta.ws.rs-api</artifactId>
+      <version>3.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <version>6.0.0</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Log4j: COMPILE scope on purpose (the opposite of the thin build).
+         This BUNDLES log4j-api + log4j-core into WEB-INF/lib inside the WAR. -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>${final.name}</finalName>
+    <!-- Reuse the exact same application source and resources as the thin build.
+         Only the packaging differs — which is the entire point of the contrast. -->
+    <sourceDirectory>${project.basedir}/../app/src/main/java</sourceDirectory>
+    <resources>
+      <resource>
+        <directory>${project.basedir}/../app/src/main/resources</directory>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-war-plugin</artifactId>
+        <version>3.4.0</version>
+        <configuration>
+          <failOnMissingWebXml>false</failOnMissingWebXml>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,77 @@
+---
+# Stable deployment of the demo app, fronted by a Service and Route.
+# The image.openshift.io/triggers annotation makes this track the ImageStream tag,
+# so a new build rolls out automatically.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  labels:
+    app: decoupled-patching-demo
+  annotations:
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"decoupled-patching-demo:stable"},"fieldPath":"spec.template.spec.containers[?(@.name==\"app\")].image"}]
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: decoupled-patching-demo
+  template:
+    metadata:
+      labels:
+        app: decoupled-patching-demo
+        track: stable
+    spec:
+      containers:
+        - name: app
+          image: decoupled-patching-demo:stable   # replaced by the trigger above
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+  labels:
+    app: decoupled-patching-demo
+spec:
+  # Selects ALL pods with app=decoupled-patching-demo — both stable and canary tracks.
+  selector:
+    app: decoupled-patching-demo
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: demo
+  labels:
+    app: decoupled-patching-demo
+spec:
+  to:
+    kind: Service
+    name: demo
+  port:
+    targetPort: http

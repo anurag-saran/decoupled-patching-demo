@@ -1,0 +1,51 @@
+---
+# Canary deployment: a single pod running the PATCHED image, sharing the Service with the
+# stable pods. With 3 stable + 1 canary, roughly 25% of live traffic hits the fix first.
+#
+# This is the deck's "canary, then fleet" step, done with plain Kubernetes objects — no extra
+# operators required. For production, OpenShift GitOps + Argo Rollouts automate the promotion
+# and the health-gated rollback (that's the "trusted software factory" slide).
+#
+# Promote:  scale stable up on the new image, then delete this canary.
+# Rollback: just delete this canary — the fleet never changed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-canary
+  labels:
+    app: decoupled-patching-demo
+    track: canary
+  annotations:
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"decoupled-patching-demo:patched"},"fieldPath":"spec.template.spec.containers[?(@.name==\"app\")].image"}]
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decoupled-patching-demo
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: decoupled-patching-demo    # same app label => same Service => receives traffic
+        track: canary
+    spec:
+      containers:
+        - name: app
+          # Point this at the patched image tag you build in the demo, e.g.
+          #   decoupled-patching-demo:patched
+          image: decoupled-patching-demo:patched
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
