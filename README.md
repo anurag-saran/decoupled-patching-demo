@@ -62,7 +62,7 @@ scripts/demo-openshift.sh                 # guided, paced walk-through
 
 # --- WildFly VM path (run on the VM) ---
 vm/setup-wildfly.sh                        # install + deploy (vulnerable)
-/opt/wildfly/bin/standalone.sh -b 0.0.0.0  # start the server
+${WILDFLY_HOME:-$HOME/wildfly-demo}/bin/standalone.sh -b 0.0.0.0  # start the server
 curl -s localhost:8080/api/version | jq .  # -> VULNERABLE
 vm/patch-vm.sh                             # swap the module, restart
 curl -s localhost:8080/api/version | jq .  # -> PATCHED, and the WAR never changed

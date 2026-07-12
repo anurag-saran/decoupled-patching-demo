@@ -9,7 +9,7 @@
 # server module that every deployment references.
 set -euo pipefail
 
-WILDFLY_HOME="${WILDFLY_HOME:-/opt/wildfly}"
+WILDFLY_HOME="${WILDFLY_HOME:-$HOME/wildfly-demo}"
 PATCHED_LOG4J="${PATCHED_LOG4J:-2.17.1}"     # stand-in for "the Lightwell-supplied fixed artifact"
 VULN_LOG4J="${VULN_LOG4J:-2.14.1}"
 MAVEN_BASE="https://repo1.maven.org/maven2/org/apache/logging/log4j"

@@ -25,7 +25,7 @@ separately.*
 **Setup (once, on the VM):**
 ```bash
 vm/setup-wildfly.sh
-/opt/wildfly/bin/standalone.sh -b 0.0.0.0 &
+${WILDFLY_HOME:-$HOME/wildfly-demo}/bin/standalone.sh -b 0.0.0.0 &
 ```
 
 ### Beat 1 — Show it's vulnerable

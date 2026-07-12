@@ -22,25 +22,37 @@ scripts/build.sh                                  # thin WAR  -> app/target/deco
 Prove the difference is real, before you even deploy:
 
 ```bash
-unzip -l app/target/decoupled-patching-demo.war      | grep -c log4j    # 0  — thin carries no Log4j
-unzip -l app-fat/target/decoupled-patching-demo-fat.war | grep -c log4j # >0 — fat bundles it
+unzip -l app/target/decoupled-patching-demo.war        | grep -iE 'log4j-(api|core).*\.jar'    # (no output) — thin carries no Log4j JAR
+unzip -l app-fat/target/decoupled-patching-demo-fat.war | grep -iE 'log4j-(api|core).*\.jar'    # 2 matches  — fat bundles log4j-api + log4j-core
 ```
+> Note: a plain `grep log4j` (no pattern) will also match `log4j2.xml` inside the thin WAR — that's
+> just the app's own logging *config* file, not a bundled library, and is expected to be there.
+> Use the pattern above (or eyeball the `.jar` suffix) to check for the actual library.
 
 > **Say:** "Same application code — literally the same source directory. The only difference is
 > where Log4j lives: outside the thin artifact, inside the fat one. Watch what that does to
 > patching."
 
-Deploy both to WildFly. Label each so the app reports which it is:
+Deploy one at a time to the same WildFly install — that's simplest and avoids a context-root
+clash, since both WARs are configured to serve at `/`:
 
 ```bash
-# Fat deployment
-DEMO_PACKAGING=fat  <start/point WildFly at the fat war>
-# Thin deployment (existing setup)
-DEMO_PACKAGING=thin vm/setup-wildfly.sh
+# 1) Thin, first (this is vm/setup-wildfly.sh's default behavior)
+vm/setup-wildfly.sh
+DEMO_PACKAGING=thin "${WILDFLY_HOME:-$HOME/wildfly-demo}"/bin/standalone.sh -b 0.0.0.0 &
+curl -s localhost:8080/api/version | jq .          # packaging: "thin"
+# ... run Act 2 (vm/patch-vm.sh) here, then stop the server (Ctrl-C or kill the job) ...
+
+# 2) Swap in the fat WAR for Act 1
+rm -f "${WILDFLY_HOME:-$HOME/wildfly-demo}"/standalone/deployments/decoupled-patching-demo.war*
+cp app-fat/target/decoupled-patching-demo-fat.war "${WILDFLY_HOME:-$HOME/wildfly-demo}"/standalone/deployments/
+DEMO_PACKAGING=fat "${WILDFLY_HOME:-$HOME/wildfly-demo}"/bin/standalone.sh -b 0.0.0.0 &
+curl -s localhost:8080/api/version | jq .          # packaging: "fat"
 ```
 
-(Simplest live: two WildFly instances, or two context roots. Even running them one at a time and
-comparing `/api/version` output side by side is enough — the scoreboard is what lands.)
+`DEMO_PACKAGING` must be set on the **same command that launches `standalone.sh`** — setting it
+on `vm/setup-wildfly.sh` alone does nothing, since that script only installs and deploys; it
+never starts the JVM the app actually runs in.
 
 ---
 

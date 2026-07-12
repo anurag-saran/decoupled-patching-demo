@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WILDFLY_HOME="${WILDFLY_HOME:-/opt/wildfly}"
+WILDFLY_HOME="${WILDFLY_HOME:-$HOME/wildfly-demo}"
 PATCHED_LOG4J="${PATCHED_LOG4J:-2.17.1}"
 VULN_LOG4J="${VULN_LOG4J:-2.14.1}"
 POM="${ROOT}/app-fat/pom.xml"

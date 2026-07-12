@@ -11,7 +11,7 @@ set -euo pipefail
 
 # ---- config (override via env) ------------------------------------------------
 WILDFLY_VERSION="${WILDFLY_VERSION:-31.0.1.Final}"
-WILDFLY_HOME="${WILDFLY_HOME:-/opt/wildfly}"
+WILDFLY_HOME="${WILDFLY_HOME:-$HOME/wildfly-demo}"
 VULN_LOG4J="${VULN_LOG4J:-2.14.1}"
 MAVEN_BASE="https://repo1.maven.org/maven2/org/apache/logging/log4j"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
