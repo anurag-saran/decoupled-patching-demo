@@ -26,18 +26,25 @@ app/                     The THIN WAR (Jakarta EE / JAX-RS). Log4j is 'provided'
 app-fat/                 The FAT WAR: same source (shared), but Log4j bundled inside — for contrast
   src/main/java/...      /api/version, /api/log, /api/health
   src/main/webapp/WEB-INF/jboss-deployment-structure.xml   <- sources Log4j from the server module
-vm/                      WildFly (VM / app-server) side
-  modules/.../module.xml The external, swappable Log4j module (starts at 2.14.1)
-  setup-wildfly.sh       Install WildFly + module + deploy the WAR
-  patch-vm.sh            THE MONEY SHOT: swap the module, restart, WAR unchanged
+vm/
+  modules/.../module.xml The external, swappable Log4j module (starts at 2.14.1, versioned filenames)
 openshift/               OpenShift side
   Dockerfile             Layered: shared dependency layer + thin app layer
   buildconfig.yaml       In-cluster binary build (no external registry needed)
   deployment.yaml        Stable Deployment + Service + Route, health probes
   canary.yaml            One patched pod behind the same Service
-scripts/                 build.sh, fetch-libs.sh, demo-openshift.sh, patch-fat.sh, callback-listener.py, cleanup
+scripts/
+  demo-vm.sh             THE ONE SCRIPT for the VM window — build, patch, GitHub PR, Fat JAR contrast
+  demo-openshift.sh      THE ONE SCRIPT for the OpenShift window — build, canary, promote, rollback
+  lib/demo-fx.sh         Shared narrate/type/run library both scripts source
+  callback-listener.py   Benign exploit-reachability listener (Python, used by demo-vm.sh)
 docs/                    DEMO-RUNBOOK.md, FATJAR-VS-DECOUPLED.md (the contrast demo), ARCHITECTURE.md, SAFETY.md
+renovate.json            Real, valid Renovate config — not a demo prop
 ```
+
+Both driver scripts are self-contained — each one function per former standalone script, callable
+individually for debugging: `scripts/demo-vm.sh <function>` or `scripts/demo-openshift.sh <function>`
+runs just that step instead of the full demo (e.g. `scripts/demo-vm.sh patch_fat`).
 
 ---
 
@@ -47,32 +54,52 @@ docs/                    DEMO-RUNBOOK.md, FATJAR-VS-DECOUPLED.md (the contrast d
 - **VM side:** a Linux VM with `curl`, `unzip`, JDK 17+ (WildFly is downloaded by the script)
 - **OpenShift side:** `oc` logged into a cluster, a project you can build in, plus `jq`
 - Outbound access to Maven Central (`repo1.maven.org`) from wherever you fetch the Log4j JARs
+- **Optional, for the real GitHub PR step:** [`gh`](https://cli.github.com) installed and
+  authenticated (`gh auth login`), and a GitHub-hosted `origin` remote. Without these, that step
+  automatically falls back to a local-only git branch/commit — nothing breaks either way.
 
 ---
 
-## Quickstart
+## Quickstart — one script per window
 
+**Window 1 — VM / WildFly (thin patch, compatibility gate, GitHub PR, Fat JAR contrast):**
 ```bash
-# 0. Build the thin WAR (and prove it contains no Log4j)
-scripts/build.sh
-
-# --- OpenShift path ---
-oc new-project decoupled-patching-demo    # or: oc project <existing>
-scripts/demo-openshift.sh                 # guided, paced walk-through
-
-# --- WildFly VM path (run on the VM) ---
-vm/setup-wildfly.sh                        # install + deploy (vulnerable)
-${WILDFLY_HOME:-$HOME/wildfly-demo}/bin/standalone.sh -b 0.0.0.0  # start the server
-curl -s localhost:8080/api/version | jq .  # -> VULNERABLE
-vm/patch-vm.sh                             # swap the module, restart
-curl -s localhost:8080/api/version | jq .  # -> PATCHED, and the WAR never changed
+scripts/demo-vm.sh
 ```
+Narrates each step, types the real command out, then runs it. Press Enter to advance.
+Flags: `DEMO_SKIP_CALLBACK=1` skips the optional exploit-reachability proof;
+`DEMO_SKIP_GATE=1` skips the real japicmp compatibility-gate run (needs internet to Maven
+Central); `DEMO_SKIP_FATJAR=1` skips the Fat JAR contrast; `DEMO_AUTOPLAY=1` auto-advances (for a
+timed rehearsal or recording instead of a live talk).
+
+**Window 2 — OpenShift (canary + rollback):**
+```bash
+oc new-project decoupled-patching-demo    # or: oc project <existing>
+scripts/demo-openshift.sh
+```
+Same narrate/type/run style, same pacing controls.
+
+That's it — you only run one script per window; nothing else to type during the demo itself.
 
 Full stage script with talk track: **[`docs/DEMO-RUNBOOK.md`](docs/DEMO-RUNBOOK.md)**.
 
 **Selling it against Fat JAR?** The side-by-side runbook and scoreboard are in
 **[`docs/FATJAR-VS-DECOUPLED.md`](docs/FATJAR-VS-DECOUPLED.md)** — the honest framing is *who does the
 work and whether the artifact stays trustworthy*, not build speed.
+
+---
+
+## The real GitHub PR step
+
+`scripts/demo-vm.sh`'s `github_pr` step is built to demo well against an audience that's used to
+seeing GitHub's UI, not just a terminal diff. If `gh` is installed, authenticated, and `origin`
+points at GitHub, it will **actually push a branch and open a real PR**, then open it in your
+browser (`gh pr view --web`) — the same branch naming and commit style Renovate uses for real. If
+any of those prerequisites are missing, it prints exactly which one and falls back to a
+local-only branch/commit instead, so the demo never hard-fails either way.
+
+It never auto-merges anything — the PR is left open, exactly as a real Renovate PR would be,
+waiting for review.
 
 ---
 

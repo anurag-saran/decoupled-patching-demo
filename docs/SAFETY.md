@@ -30,7 +30,7 @@ application artifact unchanged.
 
 - **Do not deploy on a public or shared network.** Run it locally, on an isolated VM, or in a
   non-production, network-restricted OpenShift project.
-- **Tear it down after the demo** (`scripts/cleanup-openshift.sh`, and stop/remove the VM server).
+- **Tear it down after the demo** (`scripts/demo-openshift.sh cleanup`, and stop/remove the VM server).
 - The vulnerable Log4j JARs are downloaded at setup time from Maven Central; they are not committed
   to the repo.
 - If you must run the optional callback demo, keep the listener on the **same isolated host/network**

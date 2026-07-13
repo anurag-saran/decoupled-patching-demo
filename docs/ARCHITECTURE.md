@@ -33,6 +33,17 @@ in the shared module every deployment references.
 subsystem from managing the deployment, so the app uses the module's Log4j directly and the version
 swap is unambiguous.
 
+**Why the module's JAR filenames carry the version number, deliberately.** `patch-vm.sh` fetches
+`log4j-core-2.17.1.jar` and rewrites `module.xml`'s two `resource-root path` entries to match,
+rather than overwriting a fixed `log4j-core.jar` in place. That's a real trade-off, made on
+purpose: a version-bearing filename means anyone can `ls` the module directory and know exactly
+which CVE-fixed version is deployed, without opening a JAR's manifest — at-a-glance traceability
+that a regulated (e.g. banking) customer's audit function would reasonably expect, and which is
+consistent with this deck's SBOM/provenance story elsewhere. The two-line descriptor diff you see
+each patch is the (small) price for that traceability, not an accident or extra complexity to
+paper over. The container side (below) makes the opposite, also-deliberate trade-off, for a
+different reason specific to how image layers work — see the next section.
+
 ### Why `pom.xml`'s Log4j version doesn't need to change (and doesn't block the patch)
 
 A natural objection: "the patched Log4j is a new version — doesn't `pom.xml` need updating, and
@@ -49,10 +60,15 @@ against it with zero changes — the same reason patching `libssl.so` via `apt`/
 recompile every binary linked against it.
 
 This does **not** mean `pom.xml` should be ignored forever. It should eventually catch up to
-reality — as its own separate, non-blocking, automated PR (Renovate/Dependabot) — so a developer
+reality — as its own separate, non-blocking, automated PR (Renovate; Dependabot works similarly
+but isn't what this demo simulates) — so a developer
 who clones the repo six months later builds against what's actually running in production, not
 against stale metadata. That PR is paperwork catching up to a fix that already shipped, not a
-prerequisite for shipping it.
+prerequisite for shipping it. **This isn't just asserted — run `scripts/demo-vm.sh github_pr`**
+after `scripts/demo-vm.sh patch_vm` to see it: a real local git branch and commit, styled the way Renovate
+writes them, updating `pom.xml` after the app is already running the patched library. The repo's
+`renovate.json` is a genuine, valid config, not a demo prop — security patches get top priority
+and no schedule restriction; routine bumps batch weekly.
 
 **The safety condition this depends on:** the module swap is only safe if the patched Log4j is
 truly API/ABI-compatible with what the WAR was compiled against — same public surface, internals
@@ -62,6 +78,8 @@ against the new version). This is precisely why the deck's verification chain re
 **automated compatibility gate** (an API/ABI diff, e.g. japicmp/revapi) before any module swap
 ships, and why Lightwell's promise is specifically a *backport* to your pinned version (security
 fix only, same API) rather than a forward release that might carry breaking changes.
+**This isn't just asserted — run `scripts/demo-vm.sh compatibility_gate`**, which executes real japicmp
+against the two real log4j-core JARs, so you can see exactly what it does and does not catch.
 
 ## Why the same story rebuilds — with real container mechanics — on OpenShift
 
@@ -84,7 +102,7 @@ isn't that the app layer is exempt from rebuilding, it's *what kind of work* rer
 not a Maven build with compilation and tests. "Fast" describes the nature of the work, not whether
 it happens.
 
-**Where the new version actually comes from:** `scripts/fetch-libs.sh <version>` drops the patched
+**Where the new version actually comes from:** `scripts/demo-openshift.sh fetch_libs <version>` drops the patched
 JARs into `openshift/module/` as unversioned filenames, immediately before the image build. Those
 fetched JARs are gitignored in this demo — nothing in source control records which version a given
 image was built with. That's fine for a demo; in production you'd want that version identified

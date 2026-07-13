@@ -3,8 +3,16 @@
   The external Log4j module. This lives on the SERVER, not in the WAR.
   The WAR's jboss-deployment-structure.xml depends on this module by name.
 
-  Patching = replacing these JARs and the version references below, then restarting WildFly.
-  The application WAR is never touched.
+  Filenames are VERSIONED on purpose (log4j-core-2.14.1.jar, not log4j-core.jar) — this is
+  deliberate, not an oversight. A version-bearing filename means anyone can `ls` this
+  directory and know exactly which CVE-fixed version is deployed, without opening the JAR's
+  manifest. For a regulated customer, that at-a-glance traceability matters more than the
+  small extra step of updating this file's two path references when you patch — and it's
+  consistent with the rest of this deck's SBOM/provenance story, which is built entirely
+  around distinct, identifiable artifact versions.
+
+  Patching = fetching the new-versioned JARs, updating the two path references below to
+  match, then restarting WildFly. The application WAR is never touched.
 
   Initial state: Log4j 2.14.1  ->  VULNERABLE to Log4Shell (CVE-2021-44228).
 -->
