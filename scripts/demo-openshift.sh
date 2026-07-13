@@ -78,6 +78,22 @@ diagnose_build_failure() {
   fi
 }
 
+# stage_build_context — `oc start-build --from-dir=.` uploads the ENTIRE repo root, including
+# .git history and both app/target/ and app-fat/target/'s full Maven build artifacts — far more
+# than the Dockerfile actually needs, and the real reason a build's "Uploading directory ..."
+# step can take a long time. Stage only the 5 files the Dockerfile's COPY lines reference,
+# preserving their relative paths, and build from that instead.
+stage_build_context() {
+  local stagedir; stagedir="$(mktemp -d)"
+  mkdir -p "${stagedir}/openshift/module" "${stagedir}/app/target"
+  cp openshift/Dockerfile "${stagedir}/openshift/Dockerfile"
+  cp openshift/module/module.xml "${stagedir}/openshift/module/module.xml"
+  cp openshift/module/log4j-api.jar "${stagedir}/openshift/module/log4j-api.jar"
+  cp openshift/module/log4j-core.jar "${stagedir}/openshift/module/log4j-core.jar"
+  cp app/target/decoupled-patching-demo.war "${stagedir}/app/target/decoupled-patching-demo.war"
+  echo "${stagedir}"
+}
+
 # =========================================================================================
 # fetch_libs <version> — place Log4j api+core into the OpenShift build context as
 # unversioned filenames. Container side: the whole image layer gets replaced atomically on
@@ -137,17 +153,27 @@ main() {
   step_pause
 
   narrate "Build the app image with the VULNERABLE Log4j ${VULN}"
-  type_cmd "fetch_libs ${VULN} && oc start-build ${APP} --from-dir=. --follow"
   fetch_libs "${VULN}"
-  if ! oc start-build "${APP}" --from-dir=. --follow; then
+  local ctx1; ctx1="$(stage_build_context)"
+  type_cmd "oc start-build ${APP} --from-dir=<staged: Dockerfile + module JARs + WAR only> --follow"
+  if ! oc start-build "${APP}" --from-dir="${ctx1}" --follow; then
+    rm -rf "${ctx1}"
     diagnose_build_failure
     echo "${RED}   Stopping so we don't tag a broken image.${RESET}"
     exit 1
   fi
+  rm -rf "${ctx1}"
   narrate "Import the pushed image into local tags :vulnerable and :stable"
-  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:vulnerable --reference-policy=Source"
-  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:vulnerable" --reference-policy=Source
-  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:stable" --reference-policy=Source
+  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:vulnerable --reference-policy=source"
+  if ! oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:vulnerable" --reference-policy=source; then
+    echo "${RED}!! Could not import the image into ${APP}:vulnerable. Check the DOCKERHUB_IMAGE${RESET}"
+    echo "${RED}   variable near the top of this script actually matches what was just pushed.${RESET}"
+    exit 1
+  fi
+  if ! oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:stable" --reference-policy=source; then
+    echo "${RED}!! Could not import the image into ${APP}:stable. Stopping before deploying.${RESET}"
+    exit 1
+  fi
   step_pause
 
   narrate "Deploy the app (3 replicas) + Service + Route"
@@ -163,16 +189,22 @@ main() {
   step_pause
 
   narrate "Patch: rebuild with Log4j ${PATCHED}. Only the dependency layer rebuilds; the thin app layer is copied, not recompiled."
-  type_cmd "fetch_libs ${PATCHED} && oc start-build ${APP} --from-dir=. --follow"
   fetch_libs "${PATCHED}"
-  if ! oc start-build "${APP}" --from-dir=. --follow; then
+  local ctx2; ctx2="$(stage_build_context)"
+  type_cmd "oc start-build ${APP} --from-dir=<staged: Dockerfile + module JARs + WAR only> --follow"
+  if ! oc start-build "${APP}" --from-dir="${ctx2}" --follow; then
+    rm -rf "${ctx2}"
     diagnose_build_failure
     echo "${RED}   Stopping so we don't canary a broken image.${RESET}"
     exit 1
   fi
+  rm -rf "${ctx2}"
   narrate "Import the pushed image into local tag :patched"
-  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:patched --reference-policy=Source"
-  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:patched" --reference-policy=Source
+  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:patched --reference-policy=source"
+  if ! oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:patched" --reference-policy=source; then
+    echo "${RED}!! Could not import the image into ${APP}:patched. Stopping before canary.${RESET}"
+    exit 1
+  fi
   echo "  Built :patched. The fleet is still on :stable (vulnerable) — nothing has rolled yet."
   step_pause
 

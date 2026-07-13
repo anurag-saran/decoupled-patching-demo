@@ -110,6 +110,23 @@ start_server() {
 # =========================================================================================
 # compatibility_gate <old> <new> — real japicmp run against the two real Log4j JARs.
 # =========================================================================================
+# classify_stream OLD NEW — Red Hat's z-stream (patch) / y-stream (minor) / x-stream (major),
+# same distinction as semver's patch/minor/major, which is what renovate.json's packageRules
+# already key off of.
+classify_stream() {
+  local old="$1" new="$2"
+  local old_major old_minor new_major new_minor
+  old_major="$(echo "${old}" | cut -d. -f1)"; old_minor="$(echo "${old}" | cut -d. -f2)"
+  new_major="$(echo "${new}" | cut -d. -f1)"; new_minor="$(echo "${new}" | cut -d. -f2)"
+  if [[ "${old_major}" != "${new_major}" ]]; then
+    echo "x-stream (major)"
+  elif [[ "${old_minor}" != "${new_minor}" ]]; then
+    echo "y-stream (minor)"
+  else
+    echo "z-stream (patch)"
+  fi
+}
+
 compatibility_gate() {
   local old="${1:-${VULN}}" new="${2:-${PATCHED}}"
   local japicmp_version="0.26.1"
@@ -137,15 +154,39 @@ compatibility_gate() {
   # --ignore-missing-classes: log4j-core references classes (e.g. from log4j-api) not present
   # when comparing the two log4j-core JARs in isolation. Without this flag japicmp aborts with
   # "Could not load ... Class not found" instead of completing the comparison.
+  local japicmp_out="${workdir}/japicmp-output.txt"
   type_cmd "java -jar japicmp.jar -o ${oldjar} -n ${newjar} --only-incompatible --ignore-missing-classes"
   java -jar "${workdir}/japicmp.jar" -o "${workdir}/${oldjar}" -n "${workdir}/${newjar}" \
-       --only-incompatible --ignore-missing-classes || true
+       --only-incompatible --ignore-missing-classes > "${japicmp_out}" 2>&1 || true
+  cat "${japicmp_out}"
+
+  # --- The verdict: z-stream default fast lane, y/x-stream default full regression, japicmp
+  # findings escalate a z-stream patch OUT of the fast lane regardless of the default. ---
+  local stream; stream="$(classify_stream "${old}" "${new}")"
+  local found=0
+  grep -qE '(\*\*\*|---)' "${japicmp_out}" && found=1
 
   echo ""
-  echo "   Structurally clean is not the same claim as behaviorally identical. Log4j's own"
-  echo "   Log4Shell-era fixes are a real example of a security fix changing a default"
-  echo "   behavior (JNDI lookup evaluation) — verify the exact version before citing it."
-  echo "   That gap is why canary + rollback exist downstream of this gate."
+  echo "${BOLD}Verdict (default routing: z-stream -> fast lane, y/x-stream -> full regression;${RESET}"
+  echo "${BOLD}japicmp findings escalate a z-stream patch out of the fast lane):${RESET}"
+  if [[ "${stream}" == "z-stream (patch)" && "${found}" -eq 0 ]]; then
+    echo "${GREEN}  ${old} -> ${new} is ${stream}, japicmp found no incompatibilities.${RESET}"
+    echo "${GREEN}  -> FAST LANE: rebuild, smoke test, canary, done.${RESET}"
+  elif [[ "${stream}" == "z-stream (patch)" && "${found}" -eq 1 ]]; then
+    echo "${RED}  ${old} -> ${new} is ${stream}, but japicmp found real structural changes.${RESET}"
+    echo "${RED}  -> ESCALATED to full regression, despite being a nominal patch release.${RESET}"
+  else
+    echo "${RED}  ${old} -> ${new} is ${stream} -> FULL REGRESSION by default, regardless of${RESET}"
+    echo "${RED}  what japicmp shows (minor/major bumps are assumed to carry new functionality).${RESET}"
+  fi
+  echo ""
+  echo "   Reminder: this verdict only sees STRUCTURAL changes — and the y/x-stream default is"
+  echo "   doing real work here. Log4j's actual JNDI-lookup change landed at a minor-version"
+  echo "   boundary, so this exact pair already routes to full regression regardless of japicmp."
+  echo "   The gap this rule can't close is narrower: a PATCH-level (z-stream) release that"
+  echo "   changes behavior with zero structural fingerprint would still slip through as fast"
+  echo "   lane. That's why canary + rollback exist even for the patches this rule fast-lanes,"
+  echo "   not just as a backstop for the ones it correctly flags."
 }
 
 # =========================================================================================
@@ -250,6 +291,30 @@ patch_fat() {
 # GitHub if `gh` is installed, authenticated, and origin is a GitHub remote. Falls back to a
 # local-only branch/commit (never pushed) otherwise.
 # =========================================================================================
+# =========================================================================================
+# reset_pom_versions — a previous run's patch_fat or github_pr bumps app/pom.xml and
+# app-fat/pom.xml via sed; if that change was never committed or reverted, it sits dirtying
+# the tree for every subsequent run, blocking github_pr's clean-base check every time. This
+# ONLY reverts those two specific files (never a blanket commit of everything, which could
+# accidentally sweep up real unrelated work) — safe to call automatically at demo start.
+# =========================================================================================
+reset_pom_versions() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0   # not a git repo — nothing to reset, and github_pr will no-op later too
+  fi
+  local dirty=""
+  for pom in app/pom.xml app-fat/pom.xml; do
+    if ! git diff --quiet -- "${pom}" 2>/dev/null; then
+      dirty="${dirty} ${pom}"
+    fi
+  done
+  if [[ -n "${dirty}" ]]; then
+    narrate "Resetting leftover version bumps from a previous run (only these two files)"
+    type_cmd "git checkout --${dirty}"
+    git checkout --${dirty} 2>/dev/null || true
+  fi
+}
+
 github_pr() {
   local patched="${1:-${PATCHED}}" vuln="${2:-${VULN}}"
   local branch="renovate/log4j-core-2.x"
@@ -272,6 +337,12 @@ github_pr() {
       echo "   because they moved/consolidated). If so, this is expected — just commit it:"
       echo "     git add -A && git commit -m 'update demo scripts'"
       echo "   Then re-run this."
+    elif git status --short | grep -qE '^\s*M\s+app(-fat)?/pom\.xml' \
+         && ! git status --short | grep -qvE '^\s*M\s+app(-fat)?/pom\.xml|^\s*\?\?'; then
+      echo "   Looks like a previous run's version bump was never cleaned up. Run this once:"
+      echo "     scripts/demo-vm.sh reset_pom_versions"
+      echo "   Then re-run this. (main() now does this automatically at the start of a full run —"
+      echo "   this only comes up if you called github_pr directly.)"
     else
       echo "   If this is just build output that should have been ignored, add it to .gitignore"
       echo "   and commit that first. Otherwise:  git stash   (then re-run this)."
@@ -353,7 +424,11 @@ Automated by Renovate (simulated for this demo)."
   if [[ "${use_github}" -eq 0 ]]; then
     echo ""
     echo ">> This branch is LOCAL ONLY — nothing was pushed."
-    echo "   To push and open it for real:  git push -u origin ${branch}  &&  gh pr create"
+    echo "   To push and open it for real, run:"
+    echo "     git push -u origin ${branch} && gh pr create"
+    if ! command -v gh >/dev/null 2>&1; then
+      echo "   ('gh' isn't installed — on macOS:  brew install gh   then   gh auth login)"
+    fi
   fi
 }
 
@@ -365,6 +440,7 @@ main() {
   echo "${BOLD} Decoupled Patching — VM / WildFly demo${RESET}"
   echo "${BOLD}============================================================${RESET}"
 
+  reset_pom_versions
   build_thin; step_pause
   build_fat; step_pause
   setup_wildfly; step_pause

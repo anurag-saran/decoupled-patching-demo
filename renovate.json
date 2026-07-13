@@ -1,25 +1,25 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "description": "This is a real, valid Renovate config for this repo — not a demo prop. It's what would actually open the version-bump PR in production, running independently of and after any Lightwell-driven emergency patch (see scripts/simulate-dependency-pr.sh for what that PR looks like without needing Renovate wired up to a live GitHub account). packageRules below distinguish a genuine security backport/z-stream fix from a routine feature-carrying update — see the comments on each rule.",
+  "description": "This is a real, valid Renovate config for this repo — not a demo prop. It's what would actually open the version-bump PR in production, running independently of and after any Lightwell-driven emergency patch (see scripts/simulate-dependency-pr.sh for what that PR looks like without needing Renovate wired up to a live GitHub account). packageRules below distinguish a genuine security backport from a routine feature-carrying update using Red Hat's own z-stream/y-stream/x-stream terminology (z-stream = patch release, y-stream = minor, x-stream = major) — this is Renovate's PR-priority policy only. The separate, deployment-time question of how much testing a patch needs before fleet-wide rollout (fast lane vs. full regression) is a different mechanism — see scripts/demo-vm.sh's compatibility_gate function and docs/ARCHITECTURE.md.",
 
   "packageRules": [
     {
-      "description": "Lightwell/Red Hat-backported security fixes, identified by the build qualifier on the version Renovate is proposing to move TO — not by what the version jump looks like under semver. '.redhat-NNNNN' is Red Hat's long-established Maven qualifier for exactly this kind of backport (real prior art: renovatebot/renovate discussion #9346, where Red Hat customers already configure Renovate around this exact suffix). Lightwell's own final qualifier format is still to be confirmed — see docs/ARCHITECTURE.md — so this pattern also matches the '.rhlw-NNNNN' form seen in early Lightwell UI screenshots, until that's settled. These are backports to your PINNED version, not forward releases, so they get top priority regardless of how big the version number jump looks.",
-      "matchNewValue": "/[.-](redhat|rhlw)-\\d+$/i",
+      "description": "Lightwell-backported security fixes, identified by the '.rhlw-NNNNN' build qualifier on the version Renovate is proposing to move TO — confirmed as Lightwell's own qualifier (distinct from Red Hat's separate '.redhat-NNNNN' convention, which belongs to the middleware portfolio, not Lightwell — do not treat that qualifier as a Lightwell signal). These are backports to your PINNED version, not forward releases, so they get top priority regardless of how big the version-number jump looks under semver.",
+      "matchNewValue": "/[.-]rhlw-\\d+$/i",
       "prPriority": 20,
       "schedule": ["at any time"],
       "labels": ["security", "lightwell-backport"]
     },
     {
-      "description": "Non-Lightwell dependencies: genuine patch/z-stream-level security fixes (via Renovate's vulnerabilityAlerts, which ties to actual CVE data, not just version-number shape). Still high priority, no schedule restriction — but this is the fallback for packages Lightwell doesn't cover, not the primary path.",
+      "description": "Non-Lightwell dependencies, z-stream (patch-level) security fixes — via Renovate's vulnerabilityAlerts, which ties to actual CVE data, not just version-number shape. Still high priority, no schedule restriction, but this is the fallback for packages Lightwell doesn't cover, not the primary path.",
       "matchUpdateTypes": ["patch", "digest"],
       "vulnerabilityAlerts": { "enabled": true },
       "prPriority": 10,
       "schedule": ["at any time"]
     },
     {
-      "description": "Routine (non-security) minor/major updates — these are the ones likely to carry new features, not just fixes. Batch and review on a normal cadence; never top priority, and never matched by the two rules above even if a project mislabels a feature release as a patch bump.",
+      "description": "Routine (non-security) y-stream/x-stream (minor/major) updates — these are the ones likely to carry new features, not just fixes. Batch and review on a normal cadence; never top priority, and never matched by the two rules above even if a project mislabels a feature release as a patch bump.",
       "matchUpdateTypes": ["minor", "major"],
       "schedule": ["before 6am on monday"],
       "prConcurrentLimit": 5
@@ -36,6 +36,7 @@
 
   "prBodyNotes": [
     "If this PR bumps a library that was already patched via Project Lightwell's module-swap pipeline, this commit is non-blocking paperwork — it brings source control in line with what's already running. It does not gate or delay the security fix itself.",
-    "If this PR's target version does NOT carry a Red Hat/Lightwell qualifier, it's either a non-Lightwell dependency's own security patch, or a routine update that may include new functionality — check the changelog before treating it as equivalent to a backport."
+    "If this PR's target version does NOT carry a '.rhlw-NNNNN' qualifier, it's either a non-Lightwell dependency's own security patch, or a routine y-stream/x-stream update that may include new functionality — check the changelog before treating it as equivalent to a backport.",
+    "PR priority here reflects how urgently this should be reviewed/merged, not whether the underlying fix is safe to roll out fast. That's a separate, deployment-time decision — see the compatibility-gate verdict in the demo, or docs/ARCHITECTURE.md."
   ]
 }

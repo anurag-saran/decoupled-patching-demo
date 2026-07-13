@@ -154,15 +154,15 @@ precisely so you *don't* inherit new features and a full regression cycle. The d
 (external module / layer swap, verify, canary, rollback) are the same regardless of which library
 is actually involved; only the source and version of the patched artifact differ.
 
-**Artifact naming — unconfirmed, two conflicting signals observed:** Lightwell-backported artifacts
-do appear to be distinct, uniquely-versioned coordinates rather than the plain upstream version
-string — that part is solid. The *exact* qualifier format is not: one internal source shows a
-`.redhat-NNNNN` suffix on the Maven coordinate itself, while another (a portal UI's displayed
-"latest release" label) showed `.rhlw-NNNNN` for the same package and version. Those two disagree.
-Don't state either pattern as confirmed in a customer-facing setting — say only that backports carry
-a distinguishing, trackable qualifier, without committing to its exact shape until Red Hat confirms
-it. This is exactly the kind of detail worth checking with the Lightwell team before it goes in
-front of a customer.
+**Artifact naming — confirmed by the Lightwell team.** Lightwell-backported artifacts are
+distinct, uniquely-versioned coordinates rather than the plain upstream version string, carrying
+a `.rhlw-NNNNN` qualifier. That's Lightwell's own convention specifically — it is **not** the
+same as Red Hat's separate `.redhat-NNNNN` suffix, which belongs to the existing middleware
+portfolio (JBoss and related products) and predates Lightwell entirely. The two conventions had
+looked like conflicting signals for the same thing before this was confirmed directly with
+Lightwell product; they're actually two different product lines using two different suffixes.
+Use `.rhlw-NNNNN` when describing Lightwell backports specifically, and don't cite
+`.redhat-NNNNN` as a Lightwell signal.
 
 ## Deliberate simplifications
 

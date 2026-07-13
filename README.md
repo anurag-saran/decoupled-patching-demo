@@ -92,12 +92,15 @@ placeholder:
 **How the rest of the demo still works unchanged:** `deployment.yaml` and `canary.yaml` still
 reference local ImageStreamTags (`decoupled-patching-demo:stable`, `:patched`) — nothing about
 canary/promote/rollback changes. Each build now pushes to Docker Hub's `:latest`, then
-`oc tag <dockerhub-image>:latest <local-tag> --reference-policy=Source` immediately captures that
+`oc tag <dockerhub-image>:latest <local-tag> --reference-policy=source` immediately captures that
 specific push into a stable local tag before the next build overwrites Docker Hub's `:latest`.
+Note the flag value is lowercase (`source`, not `Source`) — `oc` rejects it otherwise.
 
-> ⚠️ **This path is untested by me** — I don't have a real cluster or Docker Hub account to
-> validate the push-secret flow or the tag-capture timing against. Everything else in this repo
-> was tested wherever I could; this one needs its first real validation on your machine.
+> This path has been confirmed working end-to-end on a real cluster: push-secret auth, the build,
+> and the push to Docker Hub all succeed. The `--reference-policy` case-sensitivity bug above was
+> caught and fixed from that same real run — everything past that point (deploy, canary, promote,
+> rollback) still needs a full run to confirm, since that first real test stopped at the tag-import
+> step.
 
 ---
 

@@ -63,13 +63,24 @@ The listener prints a **CALLBACK RECEIVED** line.
 scripts/demo-vm.sh compatibility_gate 2.14.1 2.17.1
 ```
 > **Say:** "Before this ships, the pipeline runs an actual API/ABI diff — this is real japicmp,
-> not a mockup, comparing the two real JARs. Watch: it comes back structurally clean. Now —
-> that's exactly the limit we're honest about on a later slide. This tool cannot see that the
-> Log4Shell-era fixes also changed a runtime default. Structurally clean and behaviorally
-> identical are not the same claim, and this tool only proves the first one."
+> not a mockup, comparing the two real JARs." Let it run, then point at the verdict at the
+> bottom: "For log4j-core 2.14.1 to 2.17.1, japicmp actually finds real structural changes — a
+> removed class, a changed serialVersionUID. And because this version jump crosses a minor
+> version boundary — Red Hat calls that a y-stream — it defaults to full regression anyway,
+> regardless of what japicmp shows. Minor and major bumps are assumed to carry new functionality,
+> not just fixes. A patch-level, z-stream fix gets the fast lane by default — but only if
+> japicmp comes back clean too. Either signal alone can send it to full regression."
 
-This is the slide 15 / slide 19 story made literal — a real tool, run live, with a real blind
-spot you can point at instead of asserting.
+Then land the honest limit: "This verdict only sees structural changes — and the y/x-stream
+default just did real work: Log4j's actual JNDI-lookup change landed at a minor-version boundary,
+so this exact pair already gets routed to full regression regardless of what japicmp shows. The
+gap this rule can't close is narrower than that: a *patch-level*, z-stream release that changes
+behavior with zero structural fingerprint would still slip through as a clean fast-lane patch.
+This rule reduces how often that gap matters. It doesn't close it. That's what canary and
+rollback are for — including for the patches this rule fast-lanes, not just the ones it flags."
+
+This is the slide 15 / slide 19 story made literal, and it's also a live example of the
+z-stream/y-stream/x-stream routing rule from slide 18 actually running, not just described.
 
 ### Beat 3 — Patch by swapping the module
 ```bash
