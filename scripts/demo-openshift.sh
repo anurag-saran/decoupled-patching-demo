@@ -20,6 +20,11 @@ APP=decoupled-patching-demo
 VULN=2.14.1
 PATCHED=2.17.1
 MAVEN_BASE="https://repo1.maven.org/maven2/org/apache/logging/log4j"
+# Must match openshift/buildconfig.yaml's output.to.name. Only used if that BuildConfig pushes
+# to an external registry (Docker Hub) instead of the cluster's internal one — see
+# openshift/buildconfig-internal-registry.yaml for the internal-registry alternative, which
+# doesn't need this at all.
+DOCKERHUB_IMAGE="docker.io/asaran/decoupled-patching-demo"
 
 route()  { oc get route demo -o jsonpath='{.spec.host}' 2>/dev/null; }
 version_now() { curl -s "http://$(route)/api/version" | jq -r '.log4jRunningNow + "  (" + .status + ")"'; }
@@ -139,8 +144,10 @@ main() {
     echo "${RED}   Stopping so we don't tag a broken image.${RESET}"
     exit 1
   fi
-  oc tag "${APP}:latest" "${APP}:vulnerable"
-  oc tag "${APP}:latest" "${APP}:stable"
+  narrate "Import the pushed image into local tags :vulnerable and :stable"
+  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:vulnerable --reference-policy=Source"
+  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:vulnerable" --reference-policy=Source
+  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:stable" --reference-policy=Source
   step_pause
 
   narrate "Deploy the app (3 replicas) + Service + Route"
@@ -163,7 +170,9 @@ main() {
     echo "${RED}   Stopping so we don't canary a broken image.${RESET}"
     exit 1
   fi
-  oc tag "${APP}:latest" "${APP}:patched"
+  narrate "Import the pushed image into local tag :patched"
+  type_cmd "oc tag ${DOCKERHUB_IMAGE}:latest ${APP}:patched --reference-policy=Source"
+  oc tag "${DOCKERHUB_IMAGE}:latest" "${APP}:patched" --reference-policy=Source
   echo "  Built :patched. The fleet is still on :stable (vulnerable) — nothing has rolled yet."
   step_pause
 

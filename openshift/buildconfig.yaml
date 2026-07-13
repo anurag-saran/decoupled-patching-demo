@@ -1,6 +1,24 @@
---- 
-# ImageStream + binary BuildConfig. Build in-cluster from the local repo — no external
-# registry required. Usage:
+---
+# ImageStream + binary BuildConfig, pushing to an EXTERNAL registry (Docker Hub) instead of
+# the cluster's internal one. Use this variant when the cluster has no internal image registry
+# enabled (diagnose with: oc get imagestream decoupled-patching-demo -o jsonpath='{.status.dockerImageRepository}'
+# — empty output means no internal registry).
+#
+# *** CHANGE THIS to your own Docker Hub username/repo before using: ***
+#     openshift/buildconfig.yaml  ->  output.to.name
+#
+# One-time setup (run yourself — never share this credential with anyone, including an AI):
+#   oc create secret docker-registry dockerhub-push-secret \
+#     --docker-server=docker.io \
+#     --docker-username=<your-dockerhub-username> \
+#     --docker-password=<your-dockerhub-access-token> \
+#     --docker-email=<your-email>
+#   oc secrets link builder dockerhub-push-secret
+#
+# (Use a Docker Hub *access token*, not your real password:
+#  https://hub.docker.com/settings/security)
+#
+# Usage:
 #   oc apply -f openshift/buildconfig.yaml
 #   oc start-build decoupled-patching-demo --from-dir=. --follow
 apiVersion: image.openshift.io/v1
@@ -25,5 +43,7 @@ spec:
       dockerfilePath: openshift/Dockerfile
   output:
     to:
-      kind: ImageStreamTag
-      name: decoupled-patching-demo:latest
+      kind: DockerImage
+      name: docker.io/asaran/decoupled-patching-demo:latest
+    pushSecret:
+      name: dockerhub-push-secret

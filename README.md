@@ -60,6 +60,47 @@ runs just that step instead of the full demo (e.g. `scripts/demo-vm.sh patch_fat
 
 ---
 
+## OpenShift: internal vs. external registry
+
+`openshift/buildconfig.yaml` pushes to **an external registry (Docker Hub)** by default — use
+this if your cluster has no internal image registry enabled. Diagnose with:
+```bash
+oc get imagestream decoupled-patching-demo -o jsonpath='{.status.dockerImageRepository}'
+```
+Empty output confirms no internal registry — use the Docker Hub path below. Non-empty output
+means your cluster *does* have one — use `openshift/buildconfig-internal-registry.yaml` instead
+(simpler, no external credentials needed): `oc apply -f openshift/buildconfig-internal-registry.yaml`.
+
+**One-time setup for the Docker Hub path** (run these yourself — never share a Docker Hub
+credential with an AI or paste it into a script you didn't write yourself):
+```bash
+oc create secret docker-registry dockerhub-push-secret \
+  --docker-server=docker.io \
+  --docker-username=<your-dockerhub-username> \
+  --docker-password=<your-dockerhub-access-token> \
+  --docker-email=<your-email>
+oc secrets link builder dockerhub-push-secret
+```
+Use a Docker Hub **access token**, not your real password — generate one at
+[hub.docker.com/settings/security](https://hub.docker.com/settings/security).
+
+Before your first run, edit two places to use your own Docker Hub username/repo instead of the
+placeholder:
+- `openshift/buildconfig.yaml` → `output.to.name`
+- `scripts/demo-openshift.sh` → the `DOCKERHUB_IMAGE` variable near the top
+
+**How the rest of the demo still works unchanged:** `deployment.yaml` and `canary.yaml` still
+reference local ImageStreamTags (`decoupled-patching-demo:stable`, `:patched`) — nothing about
+canary/promote/rollback changes. Each build now pushes to Docker Hub's `:latest`, then
+`oc tag <dockerhub-image>:latest <local-tag> --reference-policy=Source` immediately captures that
+specific push into a stable local tag before the next build overwrites Docker Hub's `:latest`.
+
+> ⚠️ **This path is untested by me** — I don't have a real cluster or Docker Hub account to
+> validate the push-secret flow or the tag-capture timing against. Everything else in this repo
+> was tested wherever I could; this one needs its first real validation on your machine.
+
+---
+
 ## Quickstart — one script per window
 
 **Window 1 — VM / WildFly (thin patch, compatibility gate, GitHub PR, Fat JAR contrast):**

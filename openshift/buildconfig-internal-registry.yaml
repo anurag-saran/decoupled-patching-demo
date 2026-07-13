@@ -1,0 +1,32 @@
+---
+# Alternate BuildConfig using the CLUSTER'S OWN internal image registry — no external
+# credentials needed. Use this instead of openshift/buildconfig.yaml if your cluster actually
+# has the internal registry enabled (check: oc get imagestream decoupled-patching-demo -o
+# jsonpath='{.status.dockerImageRepository}' — non-empty output means it's available).
+#
+# To use this instead of the Docker Hub variant:
+#   oc apply -f openshift/buildconfig-internal-registry.yaml
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: decoupled-patching-demo
+  labels:
+    app: decoupled-patching-demo
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: decoupled-patching-demo
+  labels:
+    app: decoupled-patching-demo
+spec:
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: openshift/Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: decoupled-patching-demo:latest

@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Serve the app at the root context so endpoints are /api/version, /api/log, /api/health. -->
-<jboss-web>
-  <context-root>/</context-root>
-</jboss-web>
