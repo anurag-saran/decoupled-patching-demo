@@ -106,7 +106,7 @@ Note the flag value is lowercase (`source`, not `Source`) — `oc` rejects it ot
 
 ## Quickstart — one script per window
 
-**Window 1 — VM / WildFly (thin patch, compatibility gate, GitHub PR, Fat JAR contrast):**
+**Window 1 — VM / WildFly (thin patch, compatibility gate, drift check, GitHub PR, Fat JAR contrast):**
 ```bash
 scripts/demo-vm.sh
 ```
@@ -116,12 +116,15 @@ Flags: `DEMO_SKIP_CALLBACK=1` skips the optional exploit-reachability proof;
 Central); `DEMO_SKIP_FATJAR=1` skips the Fat JAR contrast; `DEMO_AUTOPLAY=1` auto-advances (for a
 timed rehearsal or recording instead of a live talk).
 
-**Window 2 — OpenShift (canary + rollback):**
+**Window 2 — OpenShift (compatibility gate + canary + rollback + drift check):**
 ```bash
 oc new-project decoupled-patching-demo    # or: oc project <existing>
 scripts/demo-openshift.sh
 ```
-Same narrate/type/run style, same pacing controls.
+Same narrate/type/run style, same pacing controls. Before the image rebuild it runs the same
+real japicmp compatibility gate as Window 1, `2.12.1 → 2.12.2`, a real historical z-stream
+security backport, and after the fleet-wide promote it checks configuration drift (does the
+live server match what git says should be running). `DEMO_SKIP_GATE=1` skips the gate here too.
 
 That's it — you only run one script per window; nothing else to type during the demo itself.
 

@@ -9,6 +9,10 @@
 #
 # Prereqs: logged into the cluster (`oc whoami`), in the target project (`oc project`).
 #          Run from the repo root. Needs: oc, curl, jq.
+#
+# Flags (env vars):
+#   DEMO_SKIP_GATE=1       skip the real japicmp compatibility-gate runs (needs internet)
+#   DEMO_AUTOPLAY=1        don't wait for Enter — brief pause instead (see scripts/lib/demo-fx.sh)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -188,6 +192,16 @@ main() {
   echo "  ^ VULNERABLE, as expected."
   step_pause
 
+  if [[ "${DEMO_SKIP_GATE:-0}" != "1" ]]; then
+    narrate "Real compatibility gate: japicmp against a real z-stream security backport"
+    echo "   2.12.1 -> 2.12.2 was Log4j's own emergency backport of the Log4Shell fix"
+    echo "   (CVE-2021-44228, plus CVE-2021-45046) onto the older Java-7-compatible line —"
+    echo "   a genuine patch-level release, not a hypothetical. Whatever the verdict below"
+    echo "   says is the real answer for a real case, it isn't scripted."
+    compatibility_gate "2.12.1" "2.12.2" || echo "${DIM}   (compatibility gate needs internet — DEMO_SKIP_GATE=1 to skip)${RESET}"
+    step_pause
+  fi
+
   narrate "Patch: rebuild with Log4j ${PATCHED}. Only the dependency layer rebuilds; the thin app layer is copied, not recompiled."
   fetch_libs "${PATCHED}"
   local ctx2; ctx2="$(stage_build_context)"
@@ -228,6 +242,11 @@ main() {
   poll 12
   echo "  Log4j running now: $(version_now)"
   echo "  ^ PATCHED, fleet-wide."
+  step_pause
+
+  check_drift "http://$(route)" "app/pom.xml"
+  echo "   (This script doesn't open a PR itself — scripts/demo-vm.sh's github_pr step does"
+  echo "   exactly that, closing this same gap. Same drift, same fix, either deployment target.)"
   step_pause
 
   narrate "Show the safety net: instant rollback to the last known-good"

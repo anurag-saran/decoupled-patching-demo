@@ -107,87 +107,6 @@ start_server() {
   wait_for_http "http://localhost:8080/api/health" 60
 }
 
-# =========================================================================================
-# compatibility_gate <old> <new> — real japicmp run against the two real Log4j JARs.
-# =========================================================================================
-# classify_stream OLD NEW — Red Hat's z-stream (patch) / y-stream (minor) / x-stream (major),
-# same distinction as semver's patch/minor/major, which is what renovate.json's packageRules
-# already key off of.
-classify_stream() {
-  local old="$1" new="$2"
-  local old_major old_minor new_major new_minor
-  old_major="$(echo "${old}" | cut -d. -f1)"; old_minor="$(echo "${old}" | cut -d. -f2)"
-  new_major="$(echo "${new}" | cut -d. -f1)"; new_minor="$(echo "${new}" | cut -d. -f2)"
-  if [[ "${old_major}" != "${new_major}" ]]; then
-    echo "x-stream (major)"
-  elif [[ "${old_minor}" != "${new_minor}" ]]; then
-    echo "y-stream (minor)"
-  else
-    echo "z-stream (patch)"
-  fi
-}
-
-compatibility_gate() {
-  local old="${1:-${VULN}}" new="${2:-${PATCHED}}"
-  local japicmp_version="0.26.1"
-  local workdir; workdir="$(mktemp -d)"
-  trap "rm -rf '${workdir}'" RETURN
-
-  narrate "Real compatibility gate: japicmp ${old} -> ${new} (this is japicmp, not a mockup)"
-  local cache="${HOME}/.cache/japicmp"
-  mkdir -p "${cache}"
-  if [[ ! -f "${cache}/japicmp-${japicmp_version}.jar" ]]; then
-    local jc="curl -fSL https://repo1.maven.org/maven2/com/github/siom79/japicmp/japicmp/${japicmp_version}/japicmp-${japicmp_version}-jar-with-dependencies.jar -o japicmp.jar"
-    type_cmd "${jc}"
-    curl -fSL "https://repo1.maven.org/maven2/com/github/siom79/japicmp/japicmp/${japicmp_version}/japicmp-${japicmp_version}-jar-with-dependencies.jar" \
-         -o "${cache}/japicmp-${japicmp_version}.jar"
-  fi
-  cp "${cache}/japicmp-${japicmp_version}.jar" "${workdir}/japicmp.jar"
-
-  # Filenames here match exactly what's typed below — no silent old.jar/new.jar swap.
-  local oldjar="log4j-core-${old}.jar" newjar="log4j-core-${new}.jar"
-  local oc="curl -fSL ${MAVEN_BASE}/log4j-core/${old}/${oldjar} -o ${oldjar}"
-  local nc="curl -fSL ${MAVEN_BASE}/log4j-core/${new}/${newjar} -o ${newjar}"
-  type_cmd "${oc}"; curl -fSL "${MAVEN_BASE}/log4j-core/${old}/${oldjar}" -o "${workdir}/${oldjar}"
-  type_cmd "${nc}"; curl -fSL "${MAVEN_BASE}/log4j-core/${new}/${newjar}" -o "${workdir}/${newjar}"
-
-  # --ignore-missing-classes: log4j-core references classes (e.g. from log4j-api) not present
-  # when comparing the two log4j-core JARs in isolation. Without this flag japicmp aborts with
-  # "Could not load ... Class not found" instead of completing the comparison.
-  local japicmp_out="${workdir}/japicmp-output.txt"
-  type_cmd "java -jar japicmp.jar -o ${oldjar} -n ${newjar} --only-incompatible --ignore-missing-classes"
-  java -jar "${workdir}/japicmp.jar" -o "${workdir}/${oldjar}" -n "${workdir}/${newjar}" \
-       --only-incompatible --ignore-missing-classes > "${japicmp_out}" 2>&1 || true
-  cat "${japicmp_out}"
-
-  # --- The verdict: z-stream default fast lane, y/x-stream default full regression, japicmp
-  # findings escalate a z-stream patch OUT of the fast lane regardless of the default. ---
-  local stream; stream="$(classify_stream "${old}" "${new}")"
-  local found=0
-  grep -qE '(\*\*\*|---)' "${japicmp_out}" && found=1
-
-  echo ""
-  echo "${BOLD}Verdict (default routing: z-stream -> fast lane, y/x-stream -> full regression;${RESET}"
-  echo "${BOLD}japicmp findings escalate a z-stream patch out of the fast lane):${RESET}"
-  if [[ "${stream}" == "z-stream (patch)" && "${found}" -eq 0 ]]; then
-    echo "${GREEN}  ${old} -> ${new} is ${stream}, japicmp found no incompatibilities.${RESET}"
-    echo "${GREEN}  -> FAST LANE: rebuild, smoke test, canary, done.${RESET}"
-  elif [[ "${stream}" == "z-stream (patch)" && "${found}" -eq 1 ]]; then
-    echo "${RED}  ${old} -> ${new} is ${stream}, but japicmp found real structural changes.${RESET}"
-    echo "${RED}  -> ESCALATED to full regression, despite being a nominal patch release.${RESET}"
-  else
-    echo "${RED}  ${old} -> ${new} is ${stream} -> FULL REGRESSION by default, regardless of${RESET}"
-    echo "${RED}  what japicmp shows (minor/major bumps are assumed to carry new functionality).${RESET}"
-  fi
-  echo ""
-  echo "   Reminder: this verdict only sees STRUCTURAL changes — and the y/x-stream default is"
-  echo "   doing real work here. Log4j's actual JNDI-lookup change landed at a minor-version"
-  echo "   boundary, so this exact pair already routes to full regression regardless of japicmp."
-  echo "   The gap this rule can't close is narrower: a PATCH-level (z-stream) release that"
-  echo "   changes behavior with zero structural fingerprint would still slip through as fast"
-  echo "   lane. That's why canary + rollback exist even for the patches this rule fast-lanes,"
-  echo "   not just as a backstop for the ones it correctly flags."
-}
 
 # =========================================================================================
 # patch_vm — swap the Log4j module (versioned filenames, real diff), restart, prove the WAR
@@ -328,25 +247,19 @@ github_pr() {
     echo "!! Not a git repository. Clone with git (not just unzip) to run this part of the demo."
     return 1
   fi
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "!! Uncommitted changes — commit or stash first so this starts from a clean base:"
-    git status --short | sed 's/^/     /'
-    echo ""
-    if git status --short | grep -qE '^\s*D\s'; then
-      echo "   Looks like you just updated the demo scripts themselves (files show as deleted"
-      echo "   because they moved/consolidated). If so, this is expected — just commit it:"
-      echo "     git add -A && git commit -m 'update demo scripts'"
-      echo "   Then re-run this."
-    elif git status --short | grep -qE '^\s*M\s+app(-fat)?/pom\.xml' \
-         && ! git status --short | grep -qvE '^\s*M\s+app(-fat)?/pom\.xml|^\s*\?\?'; then
-      echo "   Looks like a previous run's version bump was never cleaned up. Run this once:"
-      echo "     scripts/demo-vm.sh reset_pom_versions"
-      echo "   Then re-run this. (main() now does this automatically at the start of a full run —"
-      echo "   this only comes up if you called github_pr directly.)"
-    else
-      echo "   If this is just build output that should have been ignored, add it to .gitignore"
-      echo "   and commit that first. Otherwise:  git stash   (then re-run this)."
-    fi
+
+  # Scoped ONLY to the two files this function actually touches, app/pom.xml and
+  # app-fat/pom.xml. Deliberately ignores everything else dirty in the tree (deleted/moved
+  # scripts, doc edits, stray build artifacts under target/) — none of that is this
+  # operation's concern, and requiring a fully pristine tree caused repeated false blocks.
+  if ! git diff --quiet -- app/pom.xml app-fat/pom.xml 2>/dev/null \
+     || ! git diff --cached --quiet -- app/pom.xml app-fat/pom.xml 2>/dev/null; then
+    echo "!! app/pom.xml and/or app-fat/pom.xml have uncommitted changes — almost always a"
+    echo "   leftover version bump from a previous run. Fix with:"
+    echo "     scripts/demo-vm.sh reset_pom_versions"
+    echo "   Then re-run this. (main() does this automatically at the start of a full run —"
+    echo "   this only comes up if you called github_pr directly.)"
+    git status --short -- app/pom.xml app-fat/pom.xml | sed 's/^/     /'
     return 1
   fi
 
@@ -472,7 +385,12 @@ main() {
   fi
 
   if [[ "${DEMO_SKIP_GATE:-0}" != "1" ]]; then
-    compatibility_gate "${VULN}" "${PATCHED}" || echo "${DIM}   (compatibility gate needs internet — DEMO_SKIP_GATE=1 to skip)${RESET}"
+    narrate "Real compatibility gate: japicmp against a real z-stream security backport"
+    echo "   2.12.1 -> 2.12.2 was Log4j's own emergency backport of the Log4Shell fix"
+    echo "   (CVE-2021-44228, plus CVE-2021-45046) onto the older Java-7-compatible line —"
+    echo "   a genuine patch-level release, not a hypothetical. Whatever the verdict below"
+    echo "   says is the real answer for a real case, it isn't scripted."
+    compatibility_gate "2.12.1" "2.12.2" || echo "${DIM}   (compatibility gate needs internet — DEMO_SKIP_GATE=1 to skip)${RESET}"
     step_pause
   fi
 
@@ -481,6 +399,9 @@ main() {
   narrate "Confirm it's patched — same artifact, different library underneath."
   type_cmd "curl -s localhost:8080/api/version | jq ."
   curl -s localhost:8080/api/version | jq .
+  step_pause
+
+  check_drift "http://localhost:8080" "app/pom.xml"
   step_pause
 
   github_pr "${PATCHED}" "${VULN}"; step_pause
