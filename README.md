@@ -129,6 +129,8 @@ live server match what git says should be running). `DEMO_SKIP_GATE=1` skips the
 That's it — you only run one script per window; nothing else to type during the demo itself.
 
 Full stage script with talk track: **[`docs/DEMO-RUNBOOK.md`](docs/DEMO-RUNBOOK.md)**.
+Want a narrative to open with instead of jumping straight into beats? **[`docs/DEMO-STORY.md`](docs/DEMO-STORY.md)**
+frames the whole demo around what actually happened the night Log4Shell broke.
 
 **Selling it against Fat JAR?** The side-by-side runbook and scoreboard are in
 **[`docs/FATJAR-VS-DECOUPLED.md`](docs/FATJAR-VS-DECOUPLED.md)** — the honest framing is *who does the
