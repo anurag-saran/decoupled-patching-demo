@@ -17,7 +17,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- This is the version the WAR is COMPILED against. The version that actually RUNS
          is whatever the server module provides at runtime — that's the whole point. -->
-    <log4j.version>2.14.1</log4j.version>
+    <log4j.version>2.17.1</log4j.version>
     <final.name>decoupled-patching-demo</final.name>
   </properties>
 

@@ -19,7 +19,7 @@
     <!-- The Fat build's Log4j version. THIS is what you edit to patch a Fat JAR — and then
          you must rebuild and redeploy a new artifact. Contrast: the thin build never changes
          this file to patch. -->
-    <log4j.version>2.14.1</log4j.version>
+    <log4j.version>2.17.1</log4j.version>
     <final.name>decoupled-patching-demo-fat</final.name>
   </properties>
 
